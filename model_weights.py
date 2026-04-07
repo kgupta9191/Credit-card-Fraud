@@ -56,6 +56,63 @@ class MLP(nn.Module):
     def forward(self, x):
         return self.net(x)
 
+# Model, Loss function and Optmizer
+model = MLP()
+#criterion = nn.MSELoss()
+optimizer = optim.Adam(model.parameters(), lr=1e-4)
+pos_weight = torch.tensor([284315 / 492]).to(device)  # weight = N_neg / N_pos
+criterion = torch.nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model = model.to(device)
+model = torch.compile(model, backend="inductor")  # or backend="nvfuser" on GPU
+train_loader = DataLoader(train_ds, batch_size=1024, shuffle=True, num_workers=4, pin_memory=True)
+val_loader   = DataLoader(val_ds, batch_size=1024, shuffle=False, num_workers=4, pin_memory=True)
+test_loader = DataLoader(test_ds, batch_size=1024)
+
+# Deploying Model
+epochs = 500
+patience = 500
+best_val = float('inf')
+wait = 0
+best_model_state = None
+
+for epoch in range(epochs):
+    model.train()
+    for xb, yb in train_loader:
+        xb, yb = xb.to(device, non_blocking=True), yb.to(device, non_blocking=True)
+        yb = yb.float().unsqueeze(1)
+        optimizer.zero_grad()
+        pred = model(xb)
+        loss = criterion(pred, yb)
+        loss.backward()
+        optimizer.step()
+
+    if epoch % 100 == 0:
+        model.eval()
+        val_loss = 0.0
+        with torch.no_grad():
+            for xb, yb in val_loader:
+                xb, yb = xb.to(device, non_blocking=True), yb.to(device, non_blocking=True)
+                yb = yb.float().unsqueeze(1)
+                val_loss = criterion(model(xb), yb).item()
+
+        print(f"Epoch {epoch}: Train Loss = {loss:.4e} Val Loss = {val_loss:.4e}")
+
+        if val_loss < best_val:
+            best_val = val_loss
+            best_model_state = model.state_dict()
+            torch.save(model.state_dict(), "best_model.pth")
+            wait = 0
+        else:
+            wait += 100
+
+        if wait >= patience:
+            print("Early stopping triggered")
+            break
+
+if best_model_state is not None:
+    model.load_state_dict(best_model_state)
 
 
 
