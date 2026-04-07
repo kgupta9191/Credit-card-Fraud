@@ -1,4 +1,6 @@
-# Credit-card-Fraud
+# Credit card fraud
+
+### Introduction
 
 This project presents a deep learning-based approach for detecting fraudulent credit card transactions using a highly imbalanced dataset. A Multi-Layer Perceptron (MLP) model was implemented using PyTorch and trained on GPU for efficient computation. Special attention was given to class imbalance using weighted binary cross-entropy loss.
 
