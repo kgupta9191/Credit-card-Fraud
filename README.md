@@ -6,7 +6,7 @@ Credit card fraud detection is a critical problem in financial systems due to in
 
 ### Objective 
 
-The objective of this project is to develop a machine learning-based model for accurate fraud detection on an imbalanced dataset. The model aims to:
+The objective of this project is to develop a neural network based model for accurate fraud detection on an imbalanced dataset. The model aims to:
 
   1) Effectively identify fraudulent transactions
   2) Handle class imbalance using weighted loss functions
