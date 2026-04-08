@@ -10,3 +10,7 @@ The objective of this project is to develop a neural network based model for acc
 
   1) Effectively identify fraudulent transactions
   2) Handle class imbalance using weighted loss functions
+
+### Code implementation
+
+
