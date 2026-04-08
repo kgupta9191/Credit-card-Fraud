@@ -13,4 +13,4 @@ The objective of this project is to develop a neural network based model for acc
 
 ### Code implementation
 
-
+Run the model.py file to train the model and then implement it. This file doesn't contain the data cleaning process ad it needs manual imput and understanding. Data cleaning process is explained in detail in the report.
