@@ -3,7 +3,7 @@
 set -e
 
 REQUIRED_PYTHON="3.10"
-TARGET_FILE="src/model_weights.py"
+TARGET_FILE="src/model.py"
 
 # Load modules from requirements.txt
 REQUIREMENTS_FILE="requirements.txt"
