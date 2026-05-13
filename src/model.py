@@ -80,14 +80,16 @@ def main(
     patience=500,
     batch_size=1024,
     num_workers=4,
+    input_dim=28,
+    hidden_dim=128,
 ):
     data = pd.read_csv(data_path)
     dataset = build_dataset_from_dataframe(data)
     all_labels = dataset.tensors[1]
-    train_ds, val_ds, _ = split_dataset(dataset)
+    train_ds, val_ds, test_ds = split_dataset(dataset)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = MLP().to(device)
+    model = MLP(input_dim=input_dim, hidden_dim=hidden_dim).to(device)
     if hasattr(torch, "compile"):
         model = torch.compile(model, backend="inductor")
 
@@ -101,6 +103,13 @@ def main(
     )
     val_loader = DataLoader(
         val_ds,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+    )
+    test_loader = DataLoader(
+        test_ds,
         batch_size=batch_size,
         shuffle=False,
         num_workers=num_workers,
@@ -142,6 +151,9 @@ def main(
 
     if best_model_state is not None:
         model.load_state_dict(best_model_state)
+
+    test_loss = evaluate(model, test_loader, criterion, device)
+    print(f"Final Test Loss = {test_loss:.4e}")
 
     return model
 
