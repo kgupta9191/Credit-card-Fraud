@@ -1,108 +1,127 @@
-# Load Modules
+import pandas as pd
 import torch
 import torch.nn as nn
-import pandas as pd
 import torch.optim as optim
-from torch.utils.data import TensorDataset, DataLoader
-from torch.utils.data import random_split
-import numpy as np
+from torch.utils.data import DataLoader, TensorDataset, random_split
 
-# Load data
-data = pd.read_csv("creditcard.csv")
 
-# Before creating tensor dataset, data cleaning is done which is shown in the report and not included in the code.
-# It requires multiple plotting and generating data-charts to have a sense of outliers and data balancing.
-# This required manual input. Once done this code can be easily implemented.
-
-conv_data = torch.tensor(
-    data.values,
-    dtype=torch.float32
-)
-
-# Split data
-X = conv_data[:, :-1]
-#y = data[:, -3:].unsqueeze(1)
-y = conv_data[:, -1]
-dataset = TensorDataset(X, y)
-N = len(dataset)
-n_train = int(0.8 * N)
-n_val   = int(0.1 * N)
-n_test  = N - n_train - n_val
-train_ds, val_ds, test_ds = random_split(
-    dataset,
-    [n_train, n_val, n_test],
-    generator=torch.Generator().manual_seed(42)  # reproducible
-)
-
-# Neural Architecture
 class MLP(nn.Module):
-    def __init__(self):
+    def __init__(self, input_dim=28, hidden_dim=128):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(28, 128),
+            nn.Linear(input_dim, hidden_dim),
             nn.ReLU(),
-            nn.Linear(128, 128),
+            nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),
-            nn.Linear(128, 1)
+            nn.Linear(hidden_dim, 1),
         )
 
     def forward(self, x):
         return self.net(x)
 
-# Model, Loss function and Optmizer
-model = MLP()
-#criterion = nn.MSELoss()
-optimizer = optim.Adam(model.parameters(), lr=1e-4)
-pos_weight = torch.tensor([284315 / 492]).to(device)  # weight = N_neg / N_pos
-criterion = torch.nn.BCEWithLogitsLoss(pos_weight=pos_weight)
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = model.to(device)
-model = torch.compile(model, backend="inductor")  # or backend="nvfuser" on GPU
-train_loader = DataLoader(train_ds, batch_size=1024, shuffle=True, num_workers=4, pin_memory=True)
-val_loader   = DataLoader(val_ds, batch_size=1024, shuffle=False, num_workers=4, pin_memory=True)
-test_loader = DataLoader(test_ds, batch_size=1024)
+def build_dataset_from_dataframe(dataframe, target_col=-1):
+    conv_data = torch.tensor(dataframe.values, dtype=torch.float32)
+    X = conv_data[:, :target_col]
+    y = conv_data[:, target_col]
+    return TensorDataset(X, y)
 
-# Deploying Model
-epochs = 500
-patience = 500
-best_val = float('inf')
-wait = 0
-best_model_state = None
 
-for epoch in range(epochs):
-    model.train()
-    for xb, yb in train_loader:
-        xb, yb = xb.to(device, non_blocking=True), yb.to(device, non_blocking=True)
-        yb = yb.float().unsqueeze(1)
-        optimizer.zero_grad()
-        pred = model(xb)
-        loss = criterion(pred, yb)
-        loss.backward()
-        optimizer.step()
+def split_dataset(dataset, train_ratio=0.8, val_ratio=0.1, seed=42):
+    n_total = len(dataset)
+    n_train = int(train_ratio * n_total)
+    n_val = int(val_ratio * n_total)
+    n_test = n_total - n_train - n_val
+    return random_split(
+        dataset,
+        [n_train, n_val, n_test],
+        generator=torch.Generator().manual_seed(seed),
+    )
 
-    if epoch % 100 == 0:
-        model.eval()
-        val_loss = 0.0
-        with torch.no_grad():
-            for xb, yb in val_loader:
-                xb, yb = xb.to(device, non_blocking=True), yb.to(device, non_blocking=True)
-                yb = yb.float().unsqueeze(1)
-                val_loss = criterion(model(xb), yb).item()
 
-        print(f"Epoch {epoch}: Train Loss = {loss:.4e} Val Loss = {val_loss:.4e}")
+def get_pos_weight(labels):
+    labels = labels.float()
+    positives = labels.sum().item()
+    negatives = len(labels) - positives
+    if positives <= 0:
+        return torch.tensor([1.0], dtype=torch.float32)
+    return torch.tensor([negatives / positives], dtype=torch.float32)
 
-        if val_loss < best_val:
-            best_val = val_loss
-            best_model_state = model.state_dict()
-            torch.save(model.state_dict(), "best_model.pth")
-            wait = 0
-        else:
-            wait += 100
 
-        if wait >= patience:
-            print("Early stopping triggered")
-            break
+def train_step(model, batch, criterion, optimizer, device):
+    xb, yb = batch
+    xb = xb.to(device)
+    yb = yb.to(device).float().unsqueeze(1)
+    optimizer.zero_grad()
+    pred = model(xb)
+    loss = criterion(pred, yb)
+    loss.backward()
+    optimizer.step()
+    return loss.item()
 
-if best_model_state is not None:
-    model.load_state_dict(best_model_state)
+
+def evaluate(model, dataloader, criterion, device):
+    model.eval()
+    total_loss = 0.0
+    num_batches = 0
+    with torch.no_grad():
+        for xb, yb in dataloader:
+            xb = xb.to(device)
+            yb = yb.to(device).float().unsqueeze(1)
+            total_loss += criterion(model(xb), yb).item()
+            num_batches += 1
+    return total_loss / max(1, num_batches)
+
+
+def main(data_path="creditcard.csv", epochs=500, eval_every=100, patience=500):
+    data = pd.read_csv(data_path)
+    dataset = build_dataset_from_dataframe(data)
+    train_ds, val_ds, _ = split_dataset(dataset)
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = MLP().to(device)
+    if hasattr(torch, "compile"):
+        model = torch.compile(model, backend="inductor")
+
+    train_loader = DataLoader(train_ds, batch_size=1024, shuffle=True, num_workers=0)
+    val_loader = DataLoader(val_ds, batch_size=1024, shuffle=False, num_workers=0)
+
+    train_labels = torch.stack([y for _, y in train_ds])
+    pos_weight = get_pos_weight(train_labels).to(device)
+    criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+    optimizer = optim.Adam(model.parameters(), lr=1e-4)
+
+    best_val = float("inf")
+    wait = 0
+    best_model_state = None
+
+    for epoch in range(epochs):
+        model.train()
+        train_loss = 0.0
+        for batch in train_loader:
+            train_loss = train_step(model, batch, criterion, optimizer, device)
+
+        if epoch % eval_every == 0:
+            val_loss = evaluate(model, val_loader, criterion, device)
+            print(f"Epoch {epoch}: Train Loss = {train_loss:.4e} Val Loss = {val_loss:.4e}")
+
+            if val_loss < best_val:
+                best_val = val_loss
+                best_model_state = model.state_dict()
+                torch.save(model.state_dict(), "best_model.pth")
+                wait = 0
+            else:
+                wait += eval_every
+
+            if wait >= patience:
+                print("Early stopping triggered")
+                break
+
+    if best_model_state is not None:
+        model.load_state_dict(best_model_state)
+
+    return model
+
+
+if __name__ == "__main__":
+    main()
