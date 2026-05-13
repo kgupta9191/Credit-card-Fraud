@@ -27,8 +27,12 @@ def build_dataset_from_dataframe(dataframe, target_col=-1):
     Returns (dataset, labels_tensor).
     """
     conv_data = torch.tensor(dataframe.values, dtype=torch.float32)
-    X = conv_data[:, :target_col]
-    y = conv_data[:, target_col]
+    num_cols = conv_data.shape[1]
+    target_idx = target_col if target_col >= 0 else num_cols + target_col
+    if target_idx < 0 or target_idx >= num_cols:
+        raise IndexError(f"target_col {target_col} is out of range for {num_cols} columns")
+    y = conv_data[:, target_idx]
+    X = torch.cat((conv_data[:, :target_idx], conv_data[:, target_idx + 1 :]), dim=1)
     return TensorDataset(X, y), y
 
 
@@ -91,7 +95,7 @@ def main(
     compile_backend="inductor",
 ):
     data = pd.read_csv(data_path)
-    dataset, _ = build_dataset_from_dataframe(data)
+    dataset, all_labels = build_dataset_from_dataframe(data)
     train_ds, val_ds, test_ds = split_dataset(dataset)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -122,7 +126,11 @@ def main(
         pin_memory=pin_memory,
     )
 
-    train_labels = torch.tensor([label.item() for _, label in train_ds], dtype=torch.float32)
+    if hasattr(train_ds, "indices"):
+        train_indices = torch.tensor(train_ds.indices, dtype=torch.long)
+        train_labels = all_labels[train_indices]
+    else:
+        train_labels = torch.tensor([label.item() for _, label in train_ds], dtype=torch.float32)
     pos_weight = get_pos_weight(train_labels).to(device)
     criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
     optimizer = optim.Adam(model.parameters(), lr=1e-4)
