@@ -52,7 +52,7 @@ def get_pos_weight(labels):
     labels = labels.float()
     positives = labels.sum().item()
     negatives = len(labels) - positives
-    if positives <= 0:
+    if positives <= 0 or negatives <= 0:
         return torch.tensor([1.0], dtype=torch.float32)
     return torch.tensor([negatives / positives], dtype=torch.float32)
 
