@@ -125,7 +125,7 @@ pytest -v
 ## Notes
 
 - Data preprocessing/feature engineering is not performed in the training script; ensure your CSV is already cleaned and ready for modeling.
-- For best performance on GPU, install a CUDA-enabled PyTorch build.
+- For best performance on GPU, install a CUDA-enabled PyTorch build (see the [PyTorch installation guide](https://pytorch.org/get-started/locally/)).
 
 ## License
 
