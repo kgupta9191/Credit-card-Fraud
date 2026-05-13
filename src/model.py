@@ -21,6 +21,11 @@ class MLP(nn.Module):
 
 
 def build_dataset_from_dataframe(dataframe, target_col=-1):
+    """Convert a dataframe into a TensorDataset and return labels separately.
+
+    target_col identifies the label column (default -1 means last column).
+    Returns (dataset, labels_tensor).
+    """
     conv_data = torch.tensor(dataframe.values, dtype=torch.float32)
     X = conv_data[:, :target_col]
     y = conv_data[:, target_col]
@@ -82,15 +87,17 @@ def main(
     num_workers=4,
     input_dim=28,
     hidden_dim=128,
+    enable_compile=True,
+    compile_backend="inductor",
 ):
     data = pd.read_csv(data_path)
-    dataset, all_labels = build_dataset_from_dataframe(data)
+    dataset, _ = build_dataset_from_dataframe(data)
     train_ds, val_ds, test_ds = split_dataset(dataset)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = MLP(input_dim=input_dim, hidden_dim=hidden_dim).to(device)
-    if hasattr(torch, "compile"):
-        model = torch.compile(model, backend="inductor")
+    if enable_compile and hasattr(torch, "compile"):
+        model = torch.compile(model, backend=compile_backend)
 
     pin_memory = device.type == "cuda"
     train_loader = DataLoader(
@@ -115,7 +122,7 @@ def main(
         pin_memory=pin_memory,
     )
 
-    train_labels = all_labels[train_ds.indices]
+    train_labels = torch.tensor([label.item() for _, label in train_ds], dtype=torch.float32)
     pos_weight = get_pos_weight(train_labels).to(device)
     criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
     optimizer = optim.Adam(model.parameters(), lr=1e-4)
