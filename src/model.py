@@ -73,9 +73,17 @@ def evaluate(model, dataloader, criterion, device):
     return total_loss / max(1, num_batches)
 
 
-def main(data_path="creditcard.csv", epochs=500, eval_every=100, patience=500):
+def main(
+    data_path="creditcard.csv",
+    epochs=500,
+    eval_every=100,
+    patience=500,
+    batch_size=1024,
+    num_workers=4,
+):
     data = pd.read_csv(data_path)
     dataset = build_dataset_from_dataframe(data)
+    all_labels = dataset.tensors[1]
     train_ds, val_ds, _ = split_dataset(dataset)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -83,11 +91,23 @@ def main(data_path="creditcard.csv", epochs=500, eval_every=100, patience=500):
     if hasattr(torch, "compile"):
         model = torch.compile(model, backend="inductor")
 
-    train_loader = DataLoader(train_ds, batch_size=1024, shuffle=True, num_workers=0)
-    val_loader = DataLoader(val_ds, batch_size=1024, shuffle=False, num_workers=0)
+    pin_memory = device.type == "cuda"
+    train_loader = DataLoader(
+        train_ds,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+    )
+    val_loader = DataLoader(
+        val_ds,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+    )
 
-    train_labels = torch.stack([y for _, y in train_ds])
-    pos_weight = get_pos_weight(train_labels).to(device)
+    pos_weight = get_pos_weight(all_labels).to(device)
     criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
     optimizer = optim.Adam(model.parameters(), lr=1e-4)
 
@@ -98,12 +118,15 @@ def main(data_path="creditcard.csv", epochs=500, eval_every=100, patience=500):
     for epoch in range(epochs):
         model.train()
         train_loss = 0.0
+        batches = 0
         for batch in train_loader:
-            train_loss = train_step(model, batch, criterion, optimizer, device)
+            train_loss += train_step(model, batch, criterion, optimizer, device)
+            batches += 1
+        avg_train_loss = train_loss / max(1, batches)
 
         if epoch % eval_every == 0:
             val_loss = evaluate(model, val_loader, criterion, device)
-            print(f"Epoch {epoch}: Train Loss = {train_loss:.4e} Val Loss = {val_loss:.4e}")
+            print(f"Epoch {epoch}: Train Loss = {avg_train_loss:.4e} Val Loss = {val_loss:.4e}")
 
             if val_loss < best_val:
                 best_val = val_loss

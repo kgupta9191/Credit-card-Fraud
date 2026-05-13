@@ -16,7 +16,7 @@ def test_split_dataset_preserves_all_records():
     x = torch.randn(100, 28)
     y = torch.randint(0, 2, (100,), dtype=torch.float32)
     dataset = TensorDataset(x, y)
-    train_ds, val_ds, test_ds = split_dataset(dataset, train_ratio=0.8, val_ratio=0.1, seed=7)
+    train_ds, val_ds, test_ds = split_dataset(dataset, train_ratio=0.8, val_ratio=0.1)
     assert len(train_ds) == 80
     assert len(val_ds) == 10
     assert len(test_ds) == 10
