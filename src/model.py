@@ -24,7 +24,7 @@ def build_dataset_from_dataframe(dataframe, target_col=-1):
     conv_data = torch.tensor(dataframe.values, dtype=torch.float32)
     X = conv_data[:, :target_col]
     y = conv_data[:, target_col]
-    return TensorDataset(X, y)
+    return TensorDataset(X, y), y
 
 
 def split_dataset(dataset, train_ratio=0.8, val_ratio=0.1, seed=42):
@@ -84,8 +84,7 @@ def main(
     hidden_dim=128,
 ):
     data = pd.read_csv(data_path)
-    dataset = build_dataset_from_dataframe(data)
-    all_labels = dataset.tensors[1]
+    dataset, all_labels = build_dataset_from_dataframe(data)
     train_ds, val_ds, test_ds = split_dataset(dataset)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -116,7 +115,8 @@ def main(
         pin_memory=pin_memory,
     )
 
-    pos_weight = get_pos_weight(all_labels).to(device)
+    train_labels = all_labels[train_ds.indices]
+    pos_weight = get_pos_weight(train_labels).to(device)
     criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
     optimizer = optim.Adam(model.parameters(), lr=1e-4)
 

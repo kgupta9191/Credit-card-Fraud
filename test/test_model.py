@@ -4,6 +4,8 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from src.model import MLP, evaluate, get_pos_weight, split_dataset, train_step
 
+POS_WEIGHT = torch.tensor([1.0])
+
 
 def test_mlp_forward_shape():
     model = MLP(input_dim=28, hidden_dim=32)
@@ -29,7 +31,7 @@ def test_train_step_updates_model_parameters():
     device = torch.device("cpu")
     model = model.to(device)
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
-    criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([1.0]))
+    criterion = nn.BCEWithLogitsLoss(pos_weight=POS_WEIGHT)
     xb = torch.randn(32, 28)
     yb = torch.randint(0, 2, (32,), dtype=torch.float32)
     before = [param.detach().clone() for param in model.parameters()]
@@ -41,7 +43,7 @@ def test_train_step_updates_model_parameters():
 
 def test_evaluate_returns_valid_loss():
     model = MLP(input_dim=28, hidden_dim=16)
-    criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([1.0]))
+    criterion = nn.BCEWithLogitsLoss(pos_weight=POS_WEIGHT)
     x = torch.randn(64, 28)
     y = torch.randint(0, 2, (64,), dtype=torch.float32)
     loader = DataLoader(TensorDataset(x, y), batch_size=16, shuffle=False)
