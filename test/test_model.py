@@ -52,7 +52,7 @@ def test_evaluate_returns_valid_loss():
     assert loss >= 0
 
 
-def test_pos_weight_handles_no_positive_labels():
+def test_pos_weight_returns_default_when_no_positives():
     labels = torch.zeros(10)
     pos_weight = get_pos_weight(labels)
     assert torch.allclose(pos_weight, torch.tensor([1.0]))

@@ -126,11 +126,8 @@ def main(
         pin_memory=pin_memory,
     )
 
-    if hasattr(train_ds, "indices"):
-        train_indices = torch.tensor(train_ds.indices, dtype=torch.long)
-        train_labels = all_labels[train_indices]
-    else:
-        train_labels = torch.tensor([label.item() for _, label in train_ds], dtype=torch.float32)
+    train_indices = torch.tensor(train_ds.indices, dtype=torch.long)
+    train_labels = all_labels[train_indices]
     pos_weight = get_pos_weight(train_labels).to(device)
     criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
     optimizer = optim.Adam(model.parameters(), lr=1e-4)
